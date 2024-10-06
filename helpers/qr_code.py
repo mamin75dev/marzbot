@@ -1,0 +1,2 @@
+class QrCodeHelper:
+    pass
