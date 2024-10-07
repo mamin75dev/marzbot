@@ -4,8 +4,12 @@ from repo.config_repo import ConfigRepo
 from repo.request_repo import RequestRepo
 from models.request_model import Request
 from repo.db import db
-from marzban.marzban import Marzban
+from marzban.manager import Marzban
 import uuid
+from helpers.bytes import gigabyte_to_byte
+from helpers.duration import days_to_seconds
+from helpers.qr_code import QrCodeHelper
+from datetime import datetime, timedelta
 
 
 class CallbackHandler:
@@ -35,20 +39,38 @@ class CallbackHandler:
             await update.callback_query.answer()
             await update.callback_query.edit_message_text("خطا در عملیات: درخواست یافت نشد")
         else:
-            conf = db.select(f"SELECT * FROM configs WHERE id = {req['config_id']}")
-            # ساخت کانفیگ
-            subscription = Marzban.create_user(
-                f"CtsBot-{update.effective_user.id}",
-                str(uuid.uuid4()),
-                
+            conf = (db.select(f"SELECT * FROM configs WHERE id = {req['config_id']}"))[-1]
+            if conf is not None:
+                username = f"CtsBot-{update.effective_user.id}"
+                user_id = str(uuid.uuid4())
+                # subscription = Marzban.create_user(
+                #     username,
+                #     user_id,
+                #     gigabyte_to_byte(conf['capacity']),
+                #     days_to_seconds(conf['expire_time_in_days'])
+                # )
+                subscription = "https://api.cactusplants.org/sub/Q3RzMTAwMywxNzI2NzQwODQ5hqFdFM2_WJ"
+                service_query = f"insert into services (request_id, expires_in, subscription_link, service_username, service_userid) values (%s, %s, %s, %s, %s)"
+                now = datetime.now()
 
-            )
-            chat_id = req['chat_id']
+                days_to_add = conf['expire_time_in_days']
+                future_date = now + timedelta(days=days_to_add)
+                values = (req['id'], future_date, subscription, username, user_id)
+                db.insert(service_query, values)
 
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"",
-            )
+                chat_id = req['chat_id']
+
+                text = f"پرداخت با موفقیت انجام شد.\n\nبا تشکر از خرید شما،\nسرویس فعال شده:  {conf['fa_users_count']}, {conf['fa_expire_time']}, {conf['fa_capacity']}\n\nلینک اتصال:\n{subscription}\n\nهمچنین برای اتصال میتوانید QR کد بالا را در اپلیکیشن خود اسکن کنید."
+                filename = f"{username}_conf-{conf['id']}"
+                await QrCodeHelper.generate_qr_from_subscription(subscription, filename)
+
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    caption=text,
+                    photo=f"subscriptions/{filename}.png"
+                )
+
+            await update.callback_query.answer()
 
     @classmethod
     async def reject_request(cls, query, context):
@@ -66,6 +88,7 @@ class CallbackHandler:
                 chat_id=chat_id,
                 text="درخواست شما توسط مدیر سامانه رد شد!",
             )
+            await query.answer()
 
     @classmethod
     async def choose_plan(cls, update):

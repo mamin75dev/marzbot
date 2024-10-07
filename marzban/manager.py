@@ -1,6 +1,6 @@
 import requests
-from add_user import body
-from constants import URL
+from marzban.add_user import body
+from marzban.constants import URL
 
 
 class Marzban:

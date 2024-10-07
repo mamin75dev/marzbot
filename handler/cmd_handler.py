@@ -1,6 +1,7 @@
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import  ContextTypes
 from repo.user_repo import UserRepo
+from repo.db import db
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -30,8 +31,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             KeyboardButton("لینک کانال تلگرام"),
         ],
     ]
-
-    UserRepo.insert_user(user.id, user.first_name, user.last_name)
+    user_exists = db.select(f"select * from users where id = {user.id}")
+    if user_exists is None:
+        UserRepo.insert_user(user.id, user.first_name, user.last_name)
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
